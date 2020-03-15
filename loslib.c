@@ -21,6 +21,11 @@
 #include "lauxlib.h"
 #include "lualib.h"
 
+// iOS FIX
+#ifdef IOS
+  #include <spawn.h>
+  extern char **environ;
+#endif
 
 /*
 ** {==================================================================
@@ -137,7 +142,25 @@ static time_t l_checktime (lua_State *L, int arg) {
 
 
 
-
+#ifdef IOS
+static int os_execute (lua_State *L) {
+    const char *cmd = luaL_optstring(L, 1, NULL);
+    pid_t pid;
+    char* argv[]  =
+    {
+        cmd,
+        NULL
+    };
+    int result = posix_spawn(&pid, argv[0], NULL, NULL, argv, environ);
+    waitpid(pid, NULL, 0);
+    if (cmd != NULL)
+        return luaL_execresult(L, result);
+    else {
+        lua_pushboolean(L, result);  /* true if there is a shell */
+        return 1;
+    }
+}
+#else
 static int os_execute (lua_State *L) {
   const char *cmd = luaL_optstring(L, 1, NULL);
   int stat = system(cmd);
@@ -148,6 +171,7 @@ static int os_execute (lua_State *L) {
     return 1;
   }
 }
+#endif
 
 
 static int os_remove (lua_State *L) {
