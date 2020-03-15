@@ -212,11 +212,24 @@ static int check_next2 (LexState *ls, const char *set) {
 ** will reject ill-formed numerals.
 */
 static int read_numeral (LexState *ls, SemInfo *seminfo) {
+  /*
+  This patch allows you to insert underscores 
+  arbitrarily into numbers, like you can in Perl. 
+  This allows you to type 1_000_000 for 1 million. 
+  Based on perl-numbers.patch
+  https://hoelz.ro/projects/lua-power-patches
+  */
+  lua_assert(lisdigit(ls->current) || ls->current == '_');
+  if(ls->current == '_') {
+    next(ls);
+  } else {
+    save_and_next(ls);
+  }
+  
   TValue obj;
   const char *expo = "Ee";
   int first = ls->current;
-  lua_assert(lisdigit(ls->current));
-  save_and_next(ls);
+  
   if (first == '0' && check_next2(ls, "xX"))  /* hexadecimal? */
     expo = "Pp";
   for (;;) {
@@ -226,6 +239,8 @@ static int read_numeral (LexState *ls, SemInfo *seminfo) {
       save_and_next(ls);
     else if (ls->current == '.')
       save_and_next(ls);
+    else if(ls->current == '_')
+      next(ls);
     else break;
   }
   save(ls, '\0');
