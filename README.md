@@ -2,6 +2,8 @@
 
 This is a fork of [lua v5.3.5](https://github.com/lua/lua/tree/v5.3) with some [power patches](http://lua-users.org/wiki/LuaPowerPatches) to save tokens in [fantasy consoles/computers](https://github.com/paladin-t/fantasy). Like [TIC-80](https://github.com/nesbox/TIC-80).
 
+All Lua syntax is still valid. Only some patches were included to add sugar.
+
 ## Included Patches
 
 These are some of the patches included.
@@ -16,6 +18,12 @@ Based on `perl-numbers.patch` by _Hoelz_.
 ## [Compound Assignment Operators](http://lua-users.org/files/wiki_insecure/power_patches/5.4/plusequals-5.4.patch)
 
 Allows statements like `"object.counter += 2"`. Adds shift and bitwise operators `(<<=, >>=, &=, |=, and ^=)` to the previously implemented `+=, -=, *=, and /=.`. Based on `plusequals-5.4.patch` By _Dave Hayden_ (<dave@panic.com>) and _SvenOlsen_.
+
+## [C and Bash Style Comments](http://lua-users.org/files/wiki_insecure/power_patches/5.2/cppcomt.diff)
+
+Allow the use of C-style (`/*...*/`) multi line and Bash-style (`# ...`) single line comments in Lua source. Standard Lua comments remain available.
+
+For Bash style comments a space after is needed to differentiate it from the length (`#`) operator. Based on the patch by _criptych_.
 
 ## iOS Compatible
 
