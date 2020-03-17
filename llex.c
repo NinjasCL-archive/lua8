@@ -9,7 +9,6 @@
 
 #include "lprefix.h"
 
-
 #include <locale.h>
 #include <string.h>
 
@@ -514,7 +513,39 @@ static int llex (LexState *ls, SemInfo *seminfo) {
         next(ls);
         if (check_next1(ls, '/')) return TK_IDIV;
         if (check_next1(ls, '=')) return TK_DIVEQ;
-        else return '/';
+        if(ls->current != '*') return '/';
+        /* long comment */
+        int last = 0;
+
+        while (ls->current != EOZ) {
+          if(last == '*' && ls->current == '/') {
+            next(ls);
+            break;
+          }
+          last = ls->current;
+          next(ls);  /* skip until closing marker (or end of file) */
+        }
+        break;
+      }
+      case '#': {
+        next(ls);
+        // If the current char is not whitespace then is not a comment.
+        // it will be the length operator (#).
+        if(!(
+          ls->current  == ' '  ||
+          ls->current  == '\f' ||
+          ls->current  == '\t' ||
+          ls->current  == '\v' ||
+          ls->current  == '\r' ||
+          ls->current  == '\n')) {
+            return '#';
+          }
+
+        /* skip until end of line (or end of file) */
+        while (!currIsNewline(ls) && ls->current != EOZ) {
+          next(ls);
+        }
+        break;
       }
       case '+': {
         next(ls);
