@@ -1,0 +1,375 @@
+diff --git a/README.md b/README.md
+new file mode 100644
+index 00000000..6dedeee6
+--- /dev/null
++++ b/README.md
+@@ -0,0 +1,46 @@
++# Lua Oito (Lua 8)
++
++This is a fork of [lua v5.3.5](https://github.com/lua/lua/tree/v5.3) with some [power patches](http://lua-users.org/wiki/LuaPowerPatches) to save tokens in [fantasy consoles/computers](https://github.com/paladin-t/fantasy). Like [TIC-80](https://github.com/nesbox/TIC-80).
++
++All Lua syntax is still valid. Only some patches were included to add sugar.
++
++## Included Patches
++
++These are some of the patches included.
++
++## [Perl Style Numerals](https://hoelz.ro/projects/lua-power-patches)
++
++This patch allows you to insert underscores
++arbitrarily into numbers, like you can in Perl.
++This allows you to type `1_000_000` for 1 million.
++
++Standard Lua numerals remain available.
++
++Based on `perl-numbers.patch` by _Hoelz_.
++
++## [Compound Assignment Operators](http://lua-users.org/files/wiki_insecure/power_patches/5.4/plusequals-5.4.patch)
++
++Allows statements like `"object.counter += 2"`. Adds shift and bitwise operators `(<<=, >>=, &=, |=, and ^=)` to the previously implemented `+=, -=, *=, and /=.`.
++
++Standard Lua assignment remain available.
++
++Based on `plusequals-5.4.patch` By _Dave Hayden_ (<dave@panic.com>) and _SvenOlsen_.
++
++## [C and Bash Style Comments](http://lua-users.org/files/wiki_insecure/power_patches/5.2/cppcomt.diff)
++
++Allow the use of C-style (`/*...*/`) multi line and Bash-style (`# ...`) single line comments in Lua source.
++
++For Bash style comments a space after is needed to differentiate it from the length (`#`) operator.
++
++Standard Lua comments remain available.
++
++Based on the `cppcomt.diff` patch by _criptych_.
++
++## iOS Compatible
++
++iOS is not an _ISO C_ platform, which is what Lua commits to. So special changes were added to `loslib.c` to be compatible with this operating system.
++
++You need to set ON the `IOS` flag.
++
++Thanks to [@jet082](https://github.com/jet082)
++See https://github.com/libretro/TIC-80/issues/2
+diff --git a/llex.c b/llex.c
+index b6d9a465..d38a54e3 100644
+--- a/llex.c
++++ b/llex.c
+@@ -9,7 +9,6 @@
+ 
+ #include "lprefix.h"
+ 
+-
+ #include <locale.h>
+ #include <string.h>
+ 
+@@ -44,7 +43,8 @@ static const char *const luaX_tokens [] = {
+     "return", "then", "true", "until", "while",
+     "//", "..", "...", "==", ">=", "<=", "~=",
+     "<<", ">>", "::", "<eof>",
+-    "<number>", "<integer>", "<name>", "<string>"
++    "<number>", "<integer>", "<name>", "<string>",
++    "+=", "-=", "*=", "/=", "<<=", ">>=", "&=", "|=", "^="
+ };
+ 
+ 
+@@ -212,11 +212,24 @@ static int check_next2 (LexState *ls, const char *set) {
+ ** will reject ill-formed numerals.
+ */
+ static int read_numeral (LexState *ls, SemInfo *seminfo) {
++  /*
++  This patch allows you to insert underscores 
++  arbitrarily into numbers, like you can in Perl. 
++  This allows you to type 1_000_000 for 1 million. 
++  Based on perl-numbers.patch
++  https://hoelz.ro/projects/lua-power-patches
++  */
++  lua_assert(lisdigit(ls->current) || ls->current == '_');
++  if(ls->current == '_') {
++    next(ls);
++  } else {
++    save_and_next(ls);
++  }
++  
+   TValue obj;
+   const char *expo = "Ee";
+   int first = ls->current;
+-  lua_assert(lisdigit(ls->current));
+-  save_and_next(ls);
++  
+   if (first == '0' && check_next2(ls, "xX"))  /* hexadecimal? */
+     expo = "Pp";
+   for (;;) {
+@@ -226,6 +239,8 @@ static int read_numeral (LexState *ls, SemInfo *seminfo) {
+       save_and_next(ls);
+     else if (ls->current == '.')
+       save_and_next(ls);
++    else if(ls->current == '_')
++      next(ls);
+     else break;
+   }
+   save(ls, '\0');
+@@ -443,6 +458,7 @@ static int llex (LexState *ls, SemInfo *seminfo) {
+       }
+       case '-': {  /* '-' or '--' (comment) */
+         next(ls);
++        if (check_next1(ls, '=')) return TK_MINUSEQ;
+         if (ls->current != '-') return '-';
+         /* else is a comment */
+         next(ls);
+@@ -478,19 +494,83 @@ static int llex (LexState *ls, SemInfo *seminfo) {
+       case '<': {
+         next(ls);
+         if (check_next1(ls, '=')) return TK_LE;
+-        else if (check_next1(ls, '<')) return TK_SHL;
++        else if (check_next1(ls, '<')) {
++          if ( check_next1(ls, '=') ) return TK_SHLEQ;
++          else return TK_SHL;
++        }
+         else return '<';
+       }
+       case '>': {
+         next(ls);
+         if (check_next1(ls, '=')) return TK_GE;
+-        else if (check_next1(ls, '>')) return TK_SHR;
++        else if (check_next1(ls, '>')) {
++          if ( check_next1(ls, '=') ) return TK_SHREQ;
++          else return TK_SHR;
++        }
+         else return '>';
+       }
+       case '/': {
+         next(ls);
+         if (check_next1(ls, '/')) return TK_IDIV;
+-        else return '/';
++        if (check_next1(ls, '=')) return TK_DIVEQ;
++        if(ls->current != '*') return '/';
++        /* long comment */
++        int last = 0;
++
++        while (ls->current != EOZ) {
++          if(last == '*' && ls->current == '/') {
++            next(ls);
++            break;
++          }
++          last = ls->current;
++          next(ls);  /* skip until closing marker (or end of file) */
++        }
++        break;
++      }
++      case '#': {
++        next(ls);
++        // If the current char is not whitespace then is not a comment.
++        // it will be the length operator (#).
++        if(!(
++          ls->current  == ' '  ||
++          ls->current  == '\f' ||
++          ls->current  == '\t' ||
++          ls->current  == '\v' ||
++          ls->current  == '\r' ||
++          ls->current  == '\n')) {
++            return '#';
++          }
++
++        /* skip until end of line (or end of file) */
++        while (!currIsNewline(ls) && ls->current != EOZ) {
++          next(ls);
++        }
++        break;
++      }
++      case '+': {
++        next(ls);
++        if (check_next1(ls, '=')) return TK_PLUSEQ;
++        else return '+';
++      }
++      case '*': {
++        next(ls);
++        if (check_next1(ls, '=')) return TK_MULTEQ;
++        else return '*';
++      }
++      case '&': {
++        next(ls);
++        if (check_next1(ls, '=')) return TK_BANDEQ;
++        else return '*';
++      }
++      case '|': {
++        next(ls);
++        if (check_next1(ls, '=')) return TK_BOREQ;
++        else return '|';
++      }
++      case '^': {
++        next(ls);
++        if (check_next1(ls, '=')) return TK_BXOREQ;
++        else return '^';
+       }
+       case '~': {
+         next(ls);
+diff --git a/llex.h b/llex.h
+index 2ed0af66..79deda6e 100644
+--- a/llex.h
++++ b/llex.h
+@@ -33,7 +33,8 @@ enum RESERVED {
+   TK_IDIV, TK_CONCAT, TK_DOTS, TK_EQ, TK_GE, TK_LE, TK_NE,
+   TK_SHL, TK_SHR,
+   TK_DBCOLON, TK_EOS,
+-  TK_FLT, TK_INT, TK_NAME, TK_STRING
++  TK_FLT, TK_INT, TK_NAME, TK_STRING,
++  TK_PLUSEQ, TK_MINUSEQ, TK_MULTEQ, TK_DIVEQ, TK_SHLEQ, TK_SHREQ, TK_BANDEQ, TK_BOREQ, TK_BXOREQ
+ };
+ 
+ /* number of reserved words */
+diff --git a/loslib.c b/loslib.c
+index de590c6b..2b2c94ea 100644
+--- a/loslib.c
++++ b/loslib.c
+@@ -21,6 +21,11 @@
+ #include "lauxlib.h"
+ #include "lualib.h"
+ 
++// iOS FIX
++#ifdef IOS
++  #include <spawn.h>
++  extern char **environ;
++#endif
+ 
+ /*
+ ** {==================================================================
+@@ -137,7 +142,25 @@ static time_t l_checktime (lua_State *L, int arg) {
+ 
+ 
+ 
+-
++#ifdef IOS
++static int os_execute (lua_State *L) {
++    const char *cmd = luaL_optstring(L, 1, NULL);
++    pid_t pid;
++    char* argv[]  =
++    {
++        cmd,
++        NULL
++    };
++    int result = posix_spawn(&pid, argv[0], NULL, NULL, argv, environ);
++    waitpid(pid, NULL, 0);
++    if (cmd != NULL)
++        return luaL_execresult(L, result);
++    else {
++        lua_pushboolean(L, result);  /* true if there is a shell */
++        return 1;
++    }
++}
++#else
+ static int os_execute (lua_State *L) {
+   const char *cmd = luaL_optstring(L, 1, NULL);
+   int stat = system(cmd);
+@@ -148,6 +171,7 @@ static int os_execute (lua_State *L) {
+     return 1;
+   }
+ }
++#endif
+ 
+ 
+ static int os_remove (lua_State *L) {
+diff --git a/lparser.c b/lparser.c
+index cc54de43..b1ff5a20 100644
+--- a/lparser.c
++++ b/lparser.c
+@@ -1017,6 +1017,15 @@ static BinOpr getbinopr (int op) {
+     case TK_GE: return OPR_GE;
+     case TK_AND: return OPR_AND;
+     case TK_OR: return OPR_OR;
++    case TK_PLUSEQ: return OPR_ADD;
++    case TK_MINUSEQ: return OPR_SUB;
++    case TK_MULTEQ: return OPR_MUL;
++    case TK_DIVEQ: return OPR_DIV;
++    case TK_SHLEQ: return OPR_SHL;
++    case TK_SHREQ: return OPR_SHR;
++    case TK_BANDEQ: return OPR_BAND;
++    case TK_BOREQ: return OPR_BOR;
++    case TK_BXOREQ: return OPR_BXOR;
+     default: return OPR_NOBINOPR;
+   }
+ }
+@@ -1144,6 +1153,48 @@ static void check_conflict (LexState *ls, struct LHS_assign *lh, expdesc *v) {
+ }
+ 
+ 
++static void compound_assignment(LexState *ls, expdesc* v) {
++  BinOpr op = getbinopr(ls->t.token);
++  FuncState * fs=ls->fs;
++  int tolevel=fs->nactvar;
++  int old_free=fs->freereg;
++  expdesc e,infix;
++  int line=ls->linenumber;
++  int nextra, i;
++  luaX_next(ls);
++
++  /* create temporary local variables to lock up any registers needed
++    by indexed lvalues. */
++  lu_byte top=fs->nactvar;
++  /* protect both the table and index result registers,
++  ** ensuring that they won't be overwritten prior to the
++  ** storevar calls. */
++  if (v->k == VINDEXED) {
++    if (v->u.ind.t>=top)
++      top = v->u.ind.t+1;
++    if (v->k == VINDEXED && v->u.ind.idx >= top)
++      top = v->u.ind.idx+1;
++  }
++  nextra=top-fs->nactvar;
++  if(nextra) {
++    for(i=0;i<nextra;i++) {
++      new_localvarliteral(ls,"(temp)");
++    }
++    adjustlocalvars(ls,nextra);
++  }
++
++  infix = *v;
++  luaK_infix(fs,op,&infix);
++  expr(ls, &e);
++  luaK_posfix(fs, op, &infix, &e, line);
++  luaK_storevar(fs, v, &infix);
++  removevars(fs,tolevel);
++
++  if(old_free<fs->freereg) {
++    fs->freereg=old_free;
++  }
++}
++
+ static void assignment (LexState *ls, struct LHS_assign *lh, int nvars) {
+   expdesc e;
+   check_condition(ls, vkisvar(lh->v.k), "syntax error");
+@@ -1156,8 +1207,11 @@ static void assignment (LexState *ls, struct LHS_assign *lh, int nvars) {
+     checklimit(ls->fs, nvars + ls->L->nCcalls, LUAI_MAXCCALLS,
+                     "C levels");
+     assignment(ls, &nv, nvars+1);
+-  }
+-  else {  /* assignment -> '=' explist */
++  } else if ( ls->t.token >= TK_PLUSEQ && ls->t.token <= TK_BXOREQ ) { /* restassign -> opeq expr */
++    check_condition(ls, nvars == 1, "compound assignment not allowed on tuples");
++    compound_assignment(ls,&lh->v);
++    return;
++  } else {  /* assignment -> '=' explist */
+     int nexps;
+     checknext(ls, '=');
+     nexps = explist(ls, &e);
+@@ -1169,11 +1223,11 @@ static void assignment (LexState *ls, struct LHS_assign *lh, int nvars) {
+       return;  /* avoid default */
+     }
+   }
++  
+   init_exp(&e, VNONRELOC, ls->fs->freereg-1);  /* default assignment */
+   luaK_storevar(ls->fs, &lh->v, &e);
+ }
+ 
+-
+ static int cond (LexState *ls) {
+   /* cond -> exp */
+   expdesc v;
+@@ -1490,7 +1544,7 @@ static void exprstat (LexState *ls) {
+   FuncState *fs = ls->fs;
+   struct LHS_assign v;
+   suffixedexp(ls, &v.v);
+-  if (ls->t.token == '=' || ls->t.token == ',') { /* stat -> assignment ? */
++  if (ls->t.token == '=' || ls->t.token == ',' || (ls->t.token >= TK_PLUSEQ && ls->t.token <= TK_BXOREQ) ) { /* stat -> assignment ? */
+     v.prev = NULL;
+     assignment(ls, &v, 1);
+   }
