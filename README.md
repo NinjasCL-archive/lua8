@@ -13,17 +13,28 @@ These are some of the patches included.
 This patch allows you to insert underscores
 arbitrarily into numbers, like you can in Perl.
 This allows you to type `1_000_000` for 1 million.
+
+Standard Lua numerals remain available.
+
 Based on `perl-numbers.patch` by _Hoelz_.
 
 ## [Compound Assignment Operators](http://lua-users.org/files/wiki_insecure/power_patches/5.4/plusequals-5.4.patch)
 
-Allows statements like `"object.counter += 2"`. Adds shift and bitwise operators `(<<=, >>=, &=, |=, and ^=)` to the previously implemented `+=, -=, *=, and /=.`. Based on `plusequals-5.4.patch` By _Dave Hayden_ (<dave@panic.com>) and _SvenOlsen_.
+Allows statements like `"object.counter += 2"`. Adds shift and bitwise operators `(<<=, >>=, &=, |=, and ^=)` to the previously implemented `+=, -=, *=, and /=.`.
+
+Standard Lua assignment remain available.
+
+Based on `plusequals-5.4.patch` By _Dave Hayden_ (<dave@panic.com>) and _SvenOlsen_.
 
 ## [C and Bash Style Comments](http://lua-users.org/files/wiki_insecure/power_patches/5.2/cppcomt.diff)
 
-Allow the use of C-style (`/*...*/`) multi line and Bash-style (`# ...`) single line comments in Lua source. Standard Lua comments remain available.
+Allow the use of C-style (`/*...*/`) multi line and Bash-style (`# ...`) single line comments in Lua source.
 
-For Bash style comments a space after is needed to differentiate it from the length (`#`) operator. Based on the patch by _criptych_.
+For Bash style comments a space after is needed to differentiate it from the length (`#`) operator.
+
+Standard Lua comments remain available.
+
+Based on the `cppcomt.diff` patch by _criptych_.
 
 ## iOS Compatible
 
